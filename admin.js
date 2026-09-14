@@ -23,8 +23,16 @@ $("loginBtn").onclick = async () => {
     $("loginBtn").textContent = "로그인 중...";
 
     await auth.signInWithEmailAndPassword(ADMIN_EMAIL, password);
+
   } catch (error) {
-    alert("아이디 또는 비밀번호가 틀렸습니다.");
+    console.error("Firebase 로그인 오류:", error);
+
+    alert(
+      "로그인 오류\n\n" +
+      "코드: " + error.code + "\n" +
+      "내용: " + error.message
+    );
+
   } finally {
     $("loginBtn").disabled = false;
     $("loginBtn").textContent = "로그인";
@@ -141,6 +149,7 @@ $("saveBtn").onclick = async () => {
   }
 
   const id = clean($("managerId").value);
+
   const old = id
     ? managers.find(manager => String(manager.id) === id)
     : null;
@@ -160,6 +169,7 @@ $("saveBtn").onclick = async () => {
     const index = managers.findIndex(
       manager => String(manager.id) === id
     );
+
     managers[index] = item;
   } else {
     managers.push(item);
@@ -169,8 +179,15 @@ $("saveBtn").onclick = async () => {
     await save();
     clear();
     alert("프로필이 저장되었습니다.");
-  } catch {
-    alert("저장 권한을 확인해주세요.");
+
+  } catch (error) {
+    console.error("Firebase 저장 오류:", error);
+
+    alert(
+      "저장 오류\n\n" +
+      "코드: " + error.code + "\n" +
+      "내용: " + error.message
+    );
   }
 };
 
@@ -203,7 +220,10 @@ function edit(id) {
     ? `<img src="${manager.image}" alt="미리보기">`
     : "사진 미리보기";
 
-  scrollTo({ top: 0, behavior: "smooth" });
+  scrollTo({
+    top: 0,
+    behavior: "smooth"
+  });
 }
 
 async function del(id) {
@@ -215,8 +235,15 @@ async function del(id) {
 
   try {
     await save();
-  } catch {
-    alert("삭제 권한을 확인해주세요.");
+
+  } catch (error) {
+    console.error("Firebase 삭제 오류:", error);
+
+    alert(
+      "삭제 오류\n\n" +
+      "코드: " + error.code + "\n" +
+      "내용: " + error.message
+    );
   }
 }
 
@@ -224,17 +251,29 @@ async function move(id, direction) {
   const index = managers.findIndex(
     item => String(item.id) === String(id)
   );
+
   const next = index + direction;
 
-  if (index < 0 || next < 0 || next >= managers.length) return;
+  if (
+    index < 0 ||
+    next < 0 ||
+    next >= managers.length
+  ) return;
 
   [managers[index], managers[next]] =
     [managers[next], managers[index]];
 
   try {
     await save();
-  } catch {
-    alert("변경 권한을 확인해주세요.");
+
+  } catch (error) {
+    console.error("Firebase 순서변경 오류:", error);
+
+    alert(
+      "변경 오류\n\n" +
+      "코드: " + error.code + "\n" +
+      "내용: " + error.message
+    );
   }
 }
 
@@ -244,6 +283,7 @@ function render() {
   $("managerList").innerHTML = managers.length
     ? managers.map((manager, index) => `
       <article class="manager">
+
         <div>
           ${
             manager.image
@@ -254,6 +294,7 @@ function render() {
 
         <div>
           <strong>${manager.name}</strong>
+
           <span>
             ${manager.age || "나이 문의"} ·
             ${manager.height || "키 문의"} ·
@@ -265,18 +306,29 @@ function render() {
           <button
             onclick="move('${manager.id}', -1)"
             ${index === 0 ? "disabled" : ""}
-          >▲</button>
+          >
+            ▲
+          </button>
 
           <button
             onclick="move('${manager.id}', 1)"
             ${index === managers.length - 1 ? "disabled" : ""}
-          >▼</button>
+          >
+            ▼
+          </button>
 
-          <button onclick="edit('${manager.id}')">수정</button>
-          <button class="delete" onclick="del('${manager.id}')">
+          <button onclick="edit('${manager.id}')">
+            수정
+          </button>
+
+          <button
+            class="delete"
+            onclick="del('${manager.id}')"
+          >
             삭제
           </button>
         </div>
+
       </article>
     `).join("")
     : "<p>등록된 프로필이 없습니다.</p>";
