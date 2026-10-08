@@ -1,5 +1,6 @@
 let managers = [];
-let photoData = "";
+let photoData = [];
+let photoBusy = false;
 let loaded = false;
 
 const db = window.mwDb;
@@ -73,51 +74,67 @@ function load() {
   });
 }
 
-function compress(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onerror = reject;
-
-    reader.onload = event => {
-      const image = new Image();
-
-      image.onerror = reject;
-
-      image.onload = () => {
-        const scale = Math.min(1, 1000 / image.width);
-        const canvas = document.createElement("canvas");
-
-        canvas.width = Math.round(image.width * scale);
-        canvas.height = Math.round(image.height * scale);
-
-        canvas
-          .getContext("2d")
-          .drawImage(image, 0, 0, canvas.width, canvas.height);
-
-        resolve(canvas.toDataURL("image/jpeg", 0.76));
+function currentPhotos(manager){
+  if(!manager)return [];
+  const photos=Array.isArray(manager.photos)?manager.photos.filter(Boolean):[];
+  return [...new Set(photos.length?photos:[manager.image].filter(Boolean))].slice(0,4);
+}
+function compress(file){
+  return new Promise((resolve,reject)=>{
+    if(!file.type.startsWith('image/'))return reject(new Error('이미지 파일만 등록할 수 있습니다.'));
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('사진을 읽지 못했습니다.'));
+    reader.onload=event=>{
+      const image=new Image();
+      image.onerror=()=>reject(new Error('이미지를 열지 못했습니다.'));
+      image.onload=()=>{
+        const canvas=document.createElement('canvas');
+        const scale=Math.min(1,900/image.width,1200/image.height);
+        canvas.width=Math.max(1,Math.round(image.width*scale));
+        canvas.height=Math.max(1,Math.round(image.height*scale));
+        canvas.getContext('2d').drawImage(image,0,0,canvas.width,canvas.height);
+        let result='';
+        for(const quality of [0.72,0.62,0.5,0.4]){
+          result=canvas.toDataURL('image/jpeg',quality);
+          if(result.length<=220000)break;
+        }
+        if(result.length>220000)return reject(new Error('사진 용량이 큽니다. 더 작은 사진을 선택해주세요.'));
+        resolve(result);
       };
-
-      image.src = event.target.result;
+      image.src=event.target.result;
     };
-
     reader.readAsDataURL(file);
   });
 }
-
-$("photo").onchange = async event => {
-  const file = event.target.files[0];
-  if (!file) return;
-
-  $("preview").textContent = "사진 처리 중...";
-
-  try {
-    photoData = await compress(file);
-    $("preview").innerHTML =
-      `<img src="${photoData}" alt="미리보기">`;
-  } catch {
-    alert("사진을 처리하지 못했습니다.");
-  }
+function renderPreview(){
+  const preview=$('preview');
+  if(!photoData.length){preview.textContent='사진 미리보기';return;}
+  preview.innerHTML='';
+  photoData.forEach((src,index)=>{
+    const card=document.createElement('div');card.className='photo-preview-card';
+    const image=document.createElement('img');image.src=src;image.alt=`사진 ${index+1}`;
+    const label=document.createElement('span');label.textContent=index===0?'대표사진':`사진 ${index+1}`;
+    const actions=document.createElement('div');actions.className='photo-preview-actions';
+    const buttons=[['◀',()=>shiftPhoto(index,-1)],['▶',()=>shiftPhoto(index,1)],['삭제',()=>removePhoto(index)]];
+    buttons.forEach(([title,fn],i)=>{
+      const button=document.createElement('button');button.type='button';button.textContent=title;
+      button.setAttribute('aria-label',i===2?`사진 ${index+1} 삭제`:`사진 ${index+1} 순서 변경`);
+      button.disabled=(i===0&&index===0)||(i===1&&index===photoData.length-1);
+      button.addEventListener('click',fn);actions.appendChild(button);
+    });
+    card.append(image,label,actions);preview.appendChild(card);
+  });
+}
+function shiftPhoto(index,step){const next=index+step;if(next<0||next>=photoData.length)return;[photoData[index],photoData[next]]=[photoData[next],photoData[index]];renderPreview()}
+function removePhoto(index){photoData.splice(index,1);renderPreview()}
+$('photo').onchange=async event=>{
+  const files=Array.from(event.target.files||[]);if(!files.length)return;
+  if(photoData.length+files.length>4){alert('사진은 최대 4장까지 등록할 수 있습니다.');event.target.value='';return;}
+  photoBusy=true;$('saveBtn').disabled=true;
+  try{
+    for(const file of files){photoData.push(await compress(file));renderPreview();}
+  }catch(error){alert(error.message||'사진을 처리하지 못했습니다.');}
+  finally{photoBusy=false;$('saveBtn').disabled=false;event.target.value='';renderPreview();}
 };
 
 function clear() {
@@ -134,13 +151,14 @@ function clear() {
   });
 
   $("photo").value = "";
-  photoData = "";
-  $("preview").textContent = "사진 미리보기";
+  photoData = [];
+  renderPreview();
 }
 
 $("clearBtn").onclick = clear;
 
 $("saveBtn").onclick = async () => {
+  if(photoBusy)return;
   const name = clean($("name").value);
 
   if (!name) {
@@ -162,7 +180,8 @@ $("saveBtn").onclick = async () => {
     body: clean($("body").value),
     work: clean($("work").value),
     intro: clean($("intro").value),
-    image: photoData || (old && old.image) || ""
+    image: photoData[0] || "",
+    photos: [...photoData]
   };
 
   if (id) {
@@ -170,7 +189,8 @@ $("saveBtn").onclick = async () => {
       manager => String(manager.id) === id
     );
 
-    managers[index] = item;
+    if(index<0){alert("수정할 프로필을 찾지 못했습니다.");return;}
+    managers[index] = {...old,...item};
   } else {
     managers.push(item);
   }
@@ -214,11 +234,8 @@ function edit(id) {
   });
 
   $("managerId").value = manager.id;
-  photoData = "";
-
-  $("preview").innerHTML = manager.image
-    ? `<img src="${manager.image}" alt="미리보기">`
-    : "사진 미리보기";
+  photoData = currentPhotos(manager);
+  renderPreview();
 
   scrollTo({
     top: 0,

@@ -19,15 +19,41 @@ const profileModal=document.getElementById('profileModal');
 const profileModalContent=document.getElementById('profileModalContent');
 let mwManagers=[];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-function profilePhotos(m){const p=Array.isArray(m.photos)?m.photos:[];return [...new Set([m.image,...p].filter(Boolean))].slice(0,5)}
+function profilePhotos(m){const p=Array.isArray(m.photos)?m.photos.filter(Boolean):[];return [...new Set((p.length?p:[m.image]).filter(Boolean))].slice(0,4)}
 function renderProfiles(){
   if(!profileGrid)return;
   if(!mwManagers.length){profileGrid.innerHTML='<div class="profile-empty"><img src="assets/myeongwol-logo.png" alt=""><h3>관리사 프로필 준비 중</h3><p>새로운 프로필을 곧 안내해 드립니다.</p></div>';return}
   profileGrid.innerHTML=mwManagers.map((m,i)=>{const img=profilePhotos(m)[0]||'assets/myeongwol-profile.png';return `<button class="therapist-card" type="button" data-index="${i}"><span class="therapist-photo"><img src="${esc(img)}" alt="${esc(m.name)} 관리사 프로필" loading="lazy"></span><span class="therapist-copy"><small>MYEONGWOLGWAN</small><strong>${esc(m.name)}</strong><span>${esc(m.age||'나이 문의')} · ${esc(m.height||'키 문의')}</span><em>${esc(m.work||'출근시간 문의')}</em><b>PROFILE VIEW →</b></span></button>`}).join('');
   profileGrid.querySelectorAll('.therapist-card').forEach(btn=>btn.addEventListener('click',()=>openProfile(Number(btn.dataset.index))));
 }
-function openProfile(i){const m=mwManagers[i];if(!m)return;const photos=profilePhotos(m);const img=photos[0]||'assets/myeongwol-profile.png';profileModalContent.innerHTML=`<div class="profile-detail"><div class="profile-detail-photo"><img src="${esc(img)}" alt="${esc(m.name)} 관리사"></div><div class="profile-detail-info"><small>THERAPIST PROFILE</small><h2>${esc(m.name)}</h2><dl><div><dt>AGE</dt><dd>${esc(m.age||'문의')}</dd></div><div><dt>HEIGHT</dt><dd>${esc(m.height||'문의')}</dd></div><div><dt>BODY</dt><dd>${esc(m.body||'문의')}</dd></div><div><dt>WORK</dt><dd>${esc(m.work||'문의')}</dd></div></dl><p>${esc(m.intro||'편안한 분위기에서 정성껏 관리해 드립니다.')}</p><div class="profile-detail-actions"><a href="tel:01048982140">전화 예약</a><a href="https://t.me/myeongwol2140" target="_blank" rel="noopener">텔레그램</a></div></div></div>`;profileModal.classList.add('show');profileModal.setAttribute('aria-hidden','false')}
+let activePhotos=[];
+let activePhotoIndex=0;
+function showProfilePhoto(index){
+  if(!activePhotos.length)return;
+  activePhotoIndex=(index+activePhotos.length)%activePhotos.length;
+  const image=profileModalContent.querySelector('#profileSlideImage');
+  const count=profileModalContent.querySelector('#profileSlideCount');
+  if(image)image.src=activePhotos[activePhotoIndex];
+  if(count)count.textContent=`${activePhotoIndex+1} / ${activePhotos.length}`;
+}
+function openProfile(i){
+  const m=mwManagers[i];if(!m)return;
+  activePhotos=profilePhotos(m);
+  if(!activePhotos.length)activePhotos=['assets/myeongwol-profile.png'];
+  activePhotoIndex=0;
+  const multiple=activePhotos.length>1;
+  profileModalContent.innerHTML=`<div class="profile-detail"><div class="profile-detail-photo profile-slider" id="profileSlider"><img id="profileSlideImage" src="${esc(activePhotos[0])}" alt="${esc(m.name)} 관리사 사진 1" draggable="false">${multiple?'<button type="button" class="profile-slide-arrow prev" aria-label="이전 사진">&#10094;</button><button type="button" class="profile-slide-arrow next" aria-label="다음 사진">&#10095;</button><span class="profile-slide-count" id="profileSlideCount">1 / '+activePhotos.length+'</span>':''}</div><div class="profile-detail-info"><small>THERAPIST PROFILE</small><h2>${esc(m.name)}</h2><dl><div><dt>AGE</dt><dd>${esc(m.age||'문의')}</dd></div><div><dt>HEIGHT</dt><dd>${esc(m.height||'문의')}</dd></div><div><dt>BODY</dt><dd>${esc(m.body||'문의')}</dd></div><div><dt>WORK</dt><dd>${esc(m.work||'문의')}</dd></div></dl><p>${esc(m.intro||'편안한 분위기에서 정성껏 관리해 드립니다.')}</p><div class="profile-detail-actions"><a href="tel:01048982140">전화 예약</a><a href="https://t.me/myeongwol2140" target="_blank" rel="noopener">텔레그램</a></div></div></div>`;
+  if(multiple){
+    const slider=profileModalContent.querySelector('#profileSlider');
+    slider.querySelector('.prev').addEventListener('click',()=>showProfilePhoto(activePhotoIndex-1));
+    slider.querySelector('.next').addEventListener('click',()=>showProfilePhoto(activePhotoIndex+1));
+    let touchX=null;
+    slider.addEventListener('touchstart',e=>{touchX=e.changedTouches[0].screenX},{passive:true});
+    slider.addEventListener('touchend',e=>{if(touchX===null)return;const dx=e.changedTouches[0].screenX-touchX;touchX=null;if(Math.abs(dx)>45)showProfilePhoto(activePhotoIndex+(dx<0?1:-1))},{passive:true});
+  }
+  profileModal.classList.add('show');profileModal.setAttribute('aria-hidden','false');
+}
 document.getElementById('profileModalClose')?.addEventListener('click',()=>{profileModal.classList.remove('show');profileModal.setAttribute('aria-hidden','true')});
 profileModal?.addEventListener('click',e=>{if(e.target===profileModal)document.getElementById('profileModalClose').click()});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&profileModal?.classList.contains('show'))document.getElementById('profileModalClose').click()});
+document.addEventListener('keydown',e=>{if(!profileModal?.classList.contains('show'))return;if(e.key==='Escape')document.getElementById('profileModalClose').click();if(e.key==='ArrowLeft'&&activePhotos.length>1)showProfilePhoto(activePhotoIndex-1);if(e.key==='ArrowRight'&&activePhotos.length>1)showProfilePhoto(activePhotoIndex+1)});
 if(window.mwDb){window.mwDb.child('managers').on('value',snap=>{const v=snap.val();mwManagers=Array.isArray(v)?v.filter(Boolean):v?Object.values(v):[];renderProfiles()},()=>renderProfiles())}else renderProfiles();
